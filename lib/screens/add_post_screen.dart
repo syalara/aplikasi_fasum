@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:aplikasi_fasum/services/current_location.dart';
+import 'package:geolocator/geolocator.dart';
 
 class AddPostScreen extends StatefulWidget {
   @override
@@ -15,7 +17,10 @@ class _AddPostScreenState extends State<AddPostScreen> {
   TextEditingController _postTextController = TextEditingController();
   String? _imageUrl;
   XFile? _image;
+  Position? _currentPosition;
   final User? user = FirebaseAuth.instance.currentUser;
+
+  final CurrentLocation _locationService = CurrentLocation(); // Instantiate CurrentLocation
 
   Future<void> _getImageFromCamera() async {
     final ImagePicker _picker = ImagePicker();
@@ -48,6 +53,22 @@ class _AddPostScreenState extends State<AddPostScreen> {
     } catch (e) {
       print('Error uploading image: $e');
       return null;
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      Position? position = await _locationService.getCurrentLocation();
+      setState(() {
+        _currentPosition = position;
+      });
+    } catch (e) {
+      print('Error getting location: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mendapatkan lokasi. Silakan coba lagi.'),
+        ),
+      );
     }
   }
 
@@ -98,6 +119,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (_postTextController.text.isNotEmpty && _image != null) {
+                  await _getCurrentLocation(); // Get current location before posting
                   if (_imageUrl == null) {
                     _imageUrl = await _uploadImage(_image!);
                   }
@@ -106,8 +128,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
                       'text': _postTextController.text,
                       'image_url': _imageUrl,
                       'timestamp': Timestamp.now(),
-                      'username': user?.displayName ?? 'Anonim', // Menambahkan nama pengguna
-                      'userId': user?.uid, // Menyimpan ID pengguna untuk referensi
+                      'username': user?.email ?? 'Anonim', // Gunakan email atau pengenal lainnya
+                      'userId': user?.uid, // Simpan ID pengguna untuk referensi
+                      'location': _currentPosition != null
+                          ? {'latitude': _currentPosition!.latitude, 'longitude': _currentPosition!.longitude}
+                          : null,
                     }).then((_) {
                       Navigator.pop(context);
                     }).catchError((error) {
